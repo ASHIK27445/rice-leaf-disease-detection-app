@@ -9,6 +9,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import { predictDisease, PredictionResult } from '../lib/predictDisease';
 
 export default function ScanScreen() {
@@ -33,24 +34,45 @@ export default function ScanScreen() {
     );
   }
 
-  async function takeAndAnalyze() {
-    if (!cameraRef.current) return;
+  async function analyzeUri(uri: string) {
     setError(null);
     setResult(null);
-
-    const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
-    if (!photo) return;
-    setPhotoUri(photo.uri);
-
+    setPhotoUri(uri);
     setLoading(true);
     try {
-      const prediction = await predictDisease(photo.uri);
+      const prediction = await predictDisease(uri);
       setResult(prediction);
     } catch (e: any) {
       setError(e?.message ?? 'কিছু একটা সমস্যা হয়েছে, আবার চেষ্টা করুন');
     } finally {
       setLoading(false);
     }
+  }
+
+  async function takeAndAnalyze() {
+    if (!cameraRef.current) return;
+    const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+    if (!photo) return;
+    await analyzeUri(photo.uri);
+  }
+
+  async function pickFromGallery() {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      setError('গ্যালারি থেকে ছবি নেওয়ার জন্য অনুমতি দরকার');
+      return;
+    }
+
+    const pickerResult = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      allowsEditing: true,
+    });
+
+    if (pickerResult.canceled) return;
+
+    const uri = pickerResult.assets[0].uri;
+    await analyzeUri(uri);
   }
 
   function reset() {
@@ -64,9 +86,16 @@ export default function ScanScreen() {
       {!photoUri ? (
         <>
           <CameraView ref={cameraRef} style={styles.camera} facing="back" />
-          <TouchableOpacity style={styles.captureButton} onPress={takeAndAnalyze}>
-            <Text style={styles.captureText}>📷 পাতার ছবি তুলুন</Text>
-          </TouchableOpacity>
+
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={styles.captureButton} onPress={takeAndAnalyze}>
+              <Text style={styles.captureText}>📷 পাতার ছবি তুলুন</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.galleryButton} onPress={pickFromGallery}>
+              <Text style={styles.galleryText}>🖼️ গ্যালারি থেকে বাছুন</Text>
+            </TouchableOpacity>
+          </View>
         </>
       ) : (
         <ScrollView contentContainerStyle={styles.resultContainer}>
@@ -116,16 +145,29 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
   msg: { fontSize: 15, color: '#333', marginTop: 10, textAlign: 'center' },
   error: { color: '#bc4749', fontSize: 14, textAlign: 'center', marginVertical: 10 },
-  captureButton: {
+  actionRow: {
     position: 'absolute',
     bottom: 30,
-    alignSelf: 'center',
+    width: '100%',
+    alignItems: 'center',
+    gap: 10,
+  },
+  captureButton: {
     backgroundColor: '#2d6a4f',
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 30,
   },
   captureText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  galleryButton: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderWidth: 1,
+    borderColor: '#2d6a4f',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+  },
+  galleryText: { color: '#2d6a4f', fontSize: 14, fontWeight: '600' },
   resultContainer: { padding: 16, alignItems: 'center' },
   preview: { width: '100%', height: 260, borderRadius: 12, marginBottom: 16 },
   card: {

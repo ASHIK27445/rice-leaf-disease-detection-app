@@ -18,7 +18,8 @@ export async function loadRiceModel(): Promise<TensorflowModel> {
   if (cachedModel) return cachedModel;
   cachedModel = await loadTensorflowModel(
     // Place the .tflite file in assets/model/ and adjust this path if needed
-    require('../assets/model/RiceLeafBD_EfficientNetB0_float32.tflite')
+    require('../assets/model/RiceLeafBD_EfficientNetB0_float32.tflite'),
+    [] // delegates: [] = default CPU delegate
   );
   return cachedModel;
 }
@@ -94,8 +95,17 @@ export async function predictDisease(imageUri: string): Promise<PredictionResult
   const model = await loadRiceModel();
   const inputTensor = await imageToTensor(imageUri);
 
-  const outputs = model.runSync([inputTensor]);
-  const logits = outputs[0] as Float32Array; // shape [5], raw logits (no softmax applied by the model)
+  const inputBuffer = new ArrayBuffer(inputTensor.byteLength);
+  new Uint8Array(inputBuffer).set(
+    new Uint8Array(
+      inputTensor.buffer,
+      inputTensor.byteOffset,
+      inputTensor.byteLength
+    )
+  );
+
+  const outputs = model.runSync([inputBuffer]);
+  const logits = new Float32Array(outputs[0]); // shape [5], raw logits (no softmax applied by the model)
   const probs = softmax(logits);
 
   let bestIdx = 0;
